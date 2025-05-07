@@ -21,10 +21,18 @@ export interface Step {
   criteria: StepCriteria;
 }
 
+export interface Course {
+  id: string;
+  title: string;
+  level: string;
+  learningObjectives: string[];
+}
+
 export interface Task {
   id: string;
   title: string;
   goal: string;
+  courseId: string;
   steps: Step[];
 }
 
@@ -51,6 +59,7 @@ export interface TaskProgress {
 export interface ChatContextType {
   messages: Message[];
   task: Task | null;
+  course: Course | null;
   progress: TaskProgress | null;
   isTyping: boolean;
   sendMessage: (content: string) => void;

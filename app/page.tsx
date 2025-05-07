@@ -2,14 +2,18 @@
 
 import { useState, useEffect } from 'react';
 import TaskSelection from '@/components/task-selection';
+import CourseSelection from '@/components/course-selection';
 import ChatInterface from '@/components/chat-interface';
 import { AVAILABLE_TASKS } from '@/lib/sample-tasks';
+import { SAMPLE_COURSES } from '@/lib/sample-courses';
 import { useChat } from '@/contexts/ChatContext';
 import { Layers, ArrowLeftCircle } from 'lucide-react';
+import { Course, Task } from '@/types';
 
 export default function Home() {
-  const { task, startTask } = useChat();
+  const { task, course, startTask } = useChat();
   const [mounted, setMounted] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -19,6 +23,19 @@ export default function Home() {
   if (!mounted) {
     return null;
   }
+
+  const handleCourseSelect = (course: Course) => {
+    setSelectedCourse(course);
+  };
+
+  const handleTaskSelect = (task: Task) => {
+    startTask(task);
+  };
+
+  const handleReset = () => {
+    setSelectedCourse(null);
+    startTask(AVAILABLE_TASKS[0]);
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -30,13 +47,13 @@ export default function Home() {
             <h1 className="text-xl font-bold">Educational Task Assistant</h1>
           </div>
           
-          {task && (
+          {(task || selectedCourse) && (
             <button
-              onClick={() => startTask(AVAILABLE_TASKS[0])}
+              onClick={handleReset}
               className="flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeftCircle size={16} className="mr-1" />
-              Reset Task
+              Reset
             </button>
           )}
         </div>
@@ -46,8 +63,16 @@ export default function Home() {
       <div className="max-w-7xl mx-auto">
         {task ? (
           <ChatInterface />
+        ) : selectedCourse ? (
+          <TaskSelection 
+            tasks={AVAILABLE_TASKS.filter(task => task.courseId === selectedCourse.id)} 
+            onSelectTask={handleTaskSelect}
+          />
         ) : (
-          <TaskSelection tasks={AVAILABLE_TASKS} />
+          <CourseSelection 
+            courses={SAMPLE_COURSES} 
+            onSelectCourse={handleCourseSelect}
+          />
         )}
       </div>
     </main>

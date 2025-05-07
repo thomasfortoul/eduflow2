@@ -30,12 +30,22 @@ export function scrollToBottom(elementId: string, smooth = true): void {
 export async function callClaudeAPI(
   userMessage: string,
   step: Step,
+  contextData: any
 ): Promise<AIResponse> {
   try {
+    console.log('🔍 Sending context to API:', {
+      message: userMessage,
+      step: step,
+      contextData: contextData
+    });
+
     const response = await axios.post("/api/chat", {
       message: userMessage,
       step: step,
+      ...contextData
     });
+
+    console.log('✅ Received API response:', response.data);
 
     const aiResponse = response.data;
     return {
@@ -43,7 +53,7 @@ export async function callClaudeAPI(
       message: aiResponse.message,
     };
   } catch (error) {
-    console.error("Error calling Claude API:", error);
+    console.error("❌ Error calling Claude API:", error);
 
     if (axios.isAxiosError(error) && error.response) {
       return {

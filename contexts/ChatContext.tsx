@@ -3,12 +3,14 @@
 "use client";
 
 import React, { createContext, useContext, useState, ReactNode, useCallback } from 'react';
-import { Message, Task, TaskProgress, ChatContextType, AIResponse } from '@/types';
+import { Message, Task, TaskProgress, ChatContextType, AIResponse, Course } from '@/types';
 import { generateId, callClaudeAPI } from '@/lib/helpers';
+import { SAMPLE_COURSE } from '@/lib/sample-data';
 
 const ChatContext = createContext<ChatContextType>({
   messages: [],
   task: null,
+  course: SAMPLE_COURSE,
   progress: null,
   isTyping: false,
   sendMessage: () => {},
@@ -20,6 +22,7 @@ const ChatContext = createContext<ChatContextType>({
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [task, setTask] = useState<Task | null>(null);
+  const [course] = useState<Course>(SAMPLE_COURSE);
   const [progress, setProgress] = useState<TaskProgress | null>(null);
   const [isTyping, setIsTyping] = useState(false);
 
@@ -84,6 +87,12 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     const currentStep = task.steps.find(s => s.number === progress.currentStep);
     if (!currentStep) return;
     
+    console.log('📝 Preparing to send message with context:', {
+      task: task.title,
+      currentStep: currentStep.number,
+      course: course.title
+    });
+    
     const userMessage: Message = {
       id: generateId(),
       content,
@@ -96,7 +105,30 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     setIsTyping(true);
     
     try {
-      const aiResponse = await callClaudeAPI(content, currentStep);
+      const contextData = {
+        task: {
+          title: task.title,
+          goal: task.goal,
+          currentStep: currentStep.number,
+          stepDescription: currentStep.description,
+          stepCheckpoint: currentStep.checkpoint
+        },
+        course: {
+          title: course.title,
+          level: course.level,
+          learningObjectives: course.learningObjectives
+        },
+        progress: {
+          completedSteps: progress.completedSteps,
+          isCompleted: progress.isCompleted
+        }
+      };
+      
+      console.log('🎯 Sending context data:', contextData);
+      
+      const aiResponse = await callClaudeAPI(content, currentStep, contextData);
+      
+      console.log('🤖 Received AI response:', aiResponse);
       
       const aiMessage: Message = {
         id: generateId(),
@@ -112,7 +144,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         completeStep(progress.currentStep);
       }
     } catch (error) {
-      console.error('Error processing message:', error);
+      console.error('❌ Error in sendMessage:', error);
       
       const errorMessage: Message = {
         id: generateId(),
@@ -126,7 +158,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsTyping(false);
     }
-  }, [task, progress]);
+  }, [task, progress, course]);
 
   const completeStep = useCallback((stepNumber: number) => {
     if (!task || !progress) return;
@@ -190,6 +222,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     <ChatContext.Provider value={{
       messages,
       task,
+      course,
       progress,
       isTyping,
       sendMessage,
