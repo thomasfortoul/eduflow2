@@ -1,4 +1,4 @@
-//app/api/chat/route.ts
+// app/api/chat/route.ts
 
 import { NextResponse } from 'next/server';
 import axios from 'axios';
@@ -8,7 +8,7 @@ export async function POST(request: Request) {
   try {
     // Parse the request body
     const body = await request.json();
-    const { message, step } = body;
+    const { message } = body;
 
     // Validate inputs
     if (!message) {
@@ -17,11 +17,15 @@ export async function POST(request: Request) {
 
     // Get API key from server environment variables (not exposed to client)
     const apiKey = process.env.ANTHROPIC_API_KEY;
-    
     if (!apiKey) {
       console.error('API key is missing');
       return NextResponse.json({ error: 'API configuration error' }, { status: 500 });
     }
+
+    const systemPrompt = `You are an AI assistant helping with an educational task. Your responses should be in JSON format with exactly two fields:
+- stepApproved (boolean): whether the user's response meets the step's criteria
+- message (string): your response message or feedback
+Example: {"stepApproved": true, "message": "Great work! Moving to next step."}`;
 
     console.log('calling Claude API');
     const response = await axios.post(
@@ -29,7 +33,10 @@ export async function POST(request: Request) {
       {
         model: 'claude-3-5-haiku-latest',
         max_tokens: 1000,
-        messages: [{ role: 'user', content: message }]
+        system: systemPrompt,
+        messages: [
+          { role: 'user', content: message }
+        ]
       },
       {
         headers: {
@@ -40,96 +47,57 @@ export async function POST(request: Request) {
       }
     );
 
-    // Extract the content from Claude's response
-    const content = response.data.content[0].text;
-    
-    // If step is provided, evaluate the response
-    if (step) {
-      const evaluationResult = evaluateResponse(content, step);
-      return NextResponse.json(evaluationResult);
+    // Pull out the raw JSON-text the model returned
+    const raw = response.data.content[0].text.trim();
+
+    // Attempt to parse it as JSON
+    let result: { stepApproved: boolean; message: string };
+    try {
+      result = JSON.parse(raw);
+    } catch (err) {
+      console.error('Failed to parse AI response JSON:', raw, err);
+      return NextResponse.json(
+        { stepApproved: false, message: 'Error parsing AI response.' },
+        { status: 500 }
+      );
     }
-    
-    // Otherwise just return the content
-    return NextResponse.json({ 
-      stepApproved: true, 
-      message: content,
-      reason: "Response received" 
-    });
-    
+
+    // Return the AI-evaluated result directly
+    return NextResponse.json(result);
+
   } catch (error) {
     console.error('Error calling Claude API:', error);
-    
-    // Check if it's an Axios error with a response
+
     if (axios.isAxiosError(error) && error.response) {
-      return NextResponse.json({
-        error: 'API Error',
-        details: error.response.data
-      }, { status: error.response.status });
+      return NextResponse.json(
+        { error: 'API Error', details: error.response.data },
+        { status: error.response.status }
+      );
     }
-    
-    return NextResponse.json({ 
-      error: 'Failed to communicate with Claude API',
-      message: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+
+    return NextResponse.json(
+      {
+        error: 'Failed to communicate with Claude API',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
   }
 }
 
-// Evaluation function
-function evaluateResponse(content: string, step: any): any {
-  const { criteria } = step;
-  const contentLower = content.toLowerCase();
-  
-  // Check required elements
-  const missingElements = criteria.requiredElements.filter((element: string) => 
-    !contentLower.includes(element.toLowerCase())
-  );
-  
-  // Check keywords
-  const missingKeywords = (criteria.keywords || []).filter((keyword: string) =>
-    !contentLower.includes(keyword.toLowerCase())
-  );
-  
-  // Check length requirements
-  const contentLength = content.length;
-  const tooShort = criteria.minLength && contentLength < criteria.minLength;
-  const tooLong = criteria.maxLength && contentLength > criteria.maxLength;
-  
-  // Evaluate response
-  if (missingElements.length > 0) {
-    return {
-      stepApproved: false,
-      reason: `Missing required elements: ${missingElements.join(", ")}`,
-      message: `Your response is missing some key elements. Please include: ${missingElements.join(", ")}`
-    };
-  }
-  
-  if (missingKeywords.length > 0) {
-    return {
-      stepApproved: false,
-      reason: `Missing important concepts: ${missingKeywords.join(", ")}`,
-      message: "Could you elaborate more on your approach? Make sure to address all key concepts."
-    };
-  }
-  
-  if (tooShort) {
-    return {
-      stepApproved: false,
-      reason: `Response too short (${contentLength} chars, minimum ${criteria.minLength})`,
-      message: "Could you provide more detail in your response?"
-    };
-  }
-  
-  if (tooLong) {
-    return {
-      stepApproved: false,
-      reason: `Response too long (${contentLength} chars, maximum ${criteria.maxLength})`,
-      message: "Your response is quite detailed. Could you make it more concise?"
-    };
-  }
-  
-  return {
-    stepApproved: true,
-    reason: "Response meets all criteria",
-    message: content
-  };
-}
+    // console.log(response.data);
+    // Response example:
+    // {
+    //   id: 'msg_01S3udiez33AYvqymizwejEy',
+    //   type: 'message',
+    //   role: 'assistant',
+    //   model: 'claude-3-5-haiku-20241022',
+    //   content: [
+    //     {
+    //       type: 'text',
+    //       text: '\n' +
+    //         '    "stepApproved": false, \n' +
+    //         `    "message": "Hello! I'm ready to help you with an educational task. Could you please provide more details about what you'd like to work on?"\n` +
+    //         '}'
+    //     }
+    //   ], ... }

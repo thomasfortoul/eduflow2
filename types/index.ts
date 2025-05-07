@@ -38,7 +38,6 @@ export interface Message {
 
 export interface AIResponse {
   stepApproved: boolean;
-  reason: string;
   message: string;
 }
 
